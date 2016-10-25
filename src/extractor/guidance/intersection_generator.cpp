@@ -1,5 +1,10 @@
 #include "extractor/guidance/intersection_generator.hpp"
+
+#include "util/geojson_debug_logger.hpp"
+#include "extractor/geojson_debug_policies.hpp"
+
 #include "extractor/guidance/constants.hpp"
+#include "extractor/guidance/intersection_generator.hpp"
 #include "extractor/guidance/toolkit.hpp"
 
 #include <algorithm>
@@ -455,8 +460,11 @@ Intersection IntersectionGenerator::MergeSegregatedRoads(const NodeID intersecti
     // the difference to all angles. Otherwise we subtract it.
     bool merged_first = false;
     // these result in an adjustment of all other angles
+    const auto intersection_copy = intersection;
+    bool merged = false;
     if (CanMerge(intersection_node, intersection, 0, intersection.size() - 1))
     {
+        merged = true;
         merged_first = true;
         // moving `a` to the left
         const double correction_factor =
@@ -472,6 +480,7 @@ Intersection IntersectionGenerator::MergeSegregatedRoads(const NodeID intersecti
     }
     else if (CanMerge(intersection_node, intersection, 0, 1))
     {
+        merged = true;
         merged_first = true;
         // moving `a` to the right
         const double correction_factor = (intersection[1].turn.angle) / 2;
@@ -503,11 +512,17 @@ Intersection IntersectionGenerator::MergeSegregatedRoads(const NodeID intersecti
     {
         if (CanMerge(intersection_node, intersection, index, getRight(index)))
         {
+            merged = true;
             intersection[getRight(index)] =
                 merge(intersection[getRight(index)], intersection[index]);
             intersection.erase(intersection.begin() + index);
             --index;
         }
+    }
+
+    if (merged)
+    {
+        util::GeojsonLogger<extractor::IntersectionPrinter>::Write(intersection_node, intersection_copy);
     }
 
     const auto ByAngle = [](const ConnectedRoad &first, const ConnectedRoad second) {
