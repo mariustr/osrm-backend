@@ -2,7 +2,7 @@
 
 #include "extractor/guidance/coordinate_extractor.hpp"
 #include "util/geojson_debug_logger.hpp"
-#include "util/geojson_debug_policies.hpp"
+#include "extractor/geojson_debug_policies.hpp"
 
 #include "extractor/edge_based_edge.hpp"
 #include "extractor/extraction_containers.hpp"
