@@ -521,9 +521,7 @@ Intersection IntersectionGenerator::MergeSegregatedRoads(const NodeID intersecti
     }
 
     if (merged)
-    {
         util::GeojsonLogger<extractor::IntersectionPrinter>::Write(intersection_node, intersection_copy);
-    }
 
     const auto ByAngle = [](const ConnectedRoad &first, const ConnectedRoad second) {
         return first.turn.angle < second.turn.angle;
