@@ -157,6 +157,18 @@ class ScopedGeojsonLoggerGuard
     geojson_conversion_policy policy;
 };
 
+template <class geojson_conversion_policy, LoggingScenario scenario>
+bool GeojsonLogger<geojson_conversion_policy, scenario>::first;
+
+template <class geojson_conversion_policy, LoggingScenario scenario>
+std::mutex GeojsonLogger<geojson_conversion_policy, scenario>::lock;
+
+template <class geojson_conversion_policy, LoggingScenario scenario>
+std::ofstream GeojsonLogger<geojson_conversion_policy, scenario>::ofs;
+
+template <class geojson_conversion_policy, LoggingScenario scenario>
+geojson_conversion_policy *GeojsonLogger<geojson_conversion_policy, scenario>::policy;
+
 } // namespace util
 } // namespace osrm
 
