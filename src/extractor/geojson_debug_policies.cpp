@@ -1,4 +1,5 @@
 #include "extractor/geojson_debug_policies.hpp"
+#include "util/geojson_debug_policy_toolkit.hpp"
 #include "util/coordinate.hpp"
 
 #include <algorithm>
@@ -7,37 +8,6 @@ namespace osrm
 {
 namespace extractor
 {
-
-namespace
-{
-
-struct CoordinateToJsonArray
-{
-    util::json::Array operator()(const util::Coordinate coordinate)
-    {
-        util::json::Array json_coordinate;
-        json_coordinate.values.push_back(static_cast<double>(toFloating(coordinate.lon)));
-        json_coordinate.values.push_back(static_cast<double>(toFloating(coordinate.lat)));
-        return json_coordinate;
-    }
-};
-
-struct NodeIdToCoordinate
-{
-    NodeIdToCoordinate(const std::vector<extractor::QueryNode> &node_coordinates)
-        : node_coordinates(node_coordinates)
-    {
-    }
-
-    const std::vector<extractor::QueryNode> &node_coordinates;
-
-    util::json::Array operator()(const NodeID nid)
-    {
-        auto coordinate = node_coordinates[nid];
-        CoordinateToJsonArray converter;
-        return converter(coordinate);
-    }
-};
 
 IntersectionPrinter::IntersectionPrinter(
     const util::NodeBasedDynamicGraph &node_based_graph,
@@ -73,7 +43,7 @@ operator()(const NodeID intersection_node,
 
     const auto json_coordinates = makeJsonArray(coordinates);
     util::json::Array features;
-    features.values.push_back(makeFeature("MultiPoint", json_coordinates));
+    features.values.push_back(util::makeFeature("MultiPoint", json_coordinates));
 
     if (coordinates.size() > 1)
     {
@@ -81,7 +51,7 @@ operator()(const NodeID intersection_node,
         line_coordinates[0] = coordinates.front();
         const auto coordinate_to_line = [&](const util::Coordinate coordinate) {
             line_coordinates[1] = coordinate;
-            return makeFeature("LineString", makeJsonArray(line_coordinates));
+            return util::makeFeature("LineString", makeJsonArray(line_coordinates));
         };
 
         std::transform(std::next(coordinates.begin()),
