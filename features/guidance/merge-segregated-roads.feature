@@ -31,27 +31,27 @@ Feature: Merge Segregated Roads
     Scenario: Square Area - Same Name as road for in/out
         Given the node map
             """
-                                   i
-                                   |
-                                   |
-                                   |
-                                   g
-                                 /    \
-                               /        \
-                             /            \
-                           /                \
-                         /                    \
-            a - - - - c                        e - - - - f
-                         \                    /
-                           \                /
-                             \            /
-                               \        /
-                                 \    /
-                                   d
-                                   |
-                                   |
-                                   |
-                                   j
+                                  i
+                                  |
+                                  |
+                                  |
+                                  g
+                                /   \
+                              /       \
+                            /           \
+                          /               \
+                        /                   \
+            a - - - - c                       e - - - - f
+                        \                   /
+                          \               /
+                            \           /
+                              \       /
+                                \   /
+                                  d
+                                  |
+                                  |
+                                  |
+                                  j
             """
 
         And the ways
@@ -63,5 +63,40 @@ Feature: Merge Segregated Roads
             | jd    | bot  | no     |
 
         When I route I should get
-            | waypoints | route               | intersections | turns |
-            | a,f       | road,road,road,road |               | |
+            | waypoints | route               | intersections                                                                                      |
+            | a,f       | road,road,road,road | true:90,false:45 true:135 false:270;true:45 true:180 false:315;true:90 false:225 true:315;true:270 |
+
+    #https://www.openstreetmap.org/#map=19/52.50003/13.33915
+    @negative
+    Scenario: Short Segment due to different roads
+        Given the node map
+            """
+                                              . d
+                                          . '
+                                      . '
+                                  . '
+                              . '
+            a - - - - - - - b - - c - - - - - - e
+                            .     .
+                            .     .
+                             .   .
+                              . .
+                               .
+                               f
+                               |
+                               |
+                               |
+                               |
+                               g
+            """
+
+        And the ways
+            | nodes | name | oneway |
+            | abce  | pass | no     |
+            | db    | pass | yes    |
+            | fg    | aug  | no     |
+            | bfc   | aug  | yes    |
+
+        When I route I should get
+            | waypoints | route     | intersections                                                                       |
+            | a,e       | pass,pass | true:90, false:60 true:90 true:180 false:270, true:90 false:180 false:270; true:270 |
