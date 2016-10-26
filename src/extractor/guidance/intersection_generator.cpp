@@ -1,7 +1,7 @@
 #include "extractor/guidance/intersection_generator.hpp"
 
-#include "util/geojson_debug_logger.hpp"
 #include "extractor/geojson_debug_policies.hpp"
+#include "util/geojson_debug_logger.hpp"
 
 #include "extractor/guidance/constants.hpp"
 #include "extractor/guidance/intersection_generator.hpp"
@@ -250,8 +250,8 @@ bool IntersectionGenerator::CanMerge(const NodeID node_at_intersection,
         return false;
 
     // mergeable if the angle is not too big
-    const auto angle_between = angularDeviation(intersection[first_index].turn.angle,
-                                                intersection[second_index].turn.angle);
+    const auto angle_between =
+        angleBetween(intersection[first_index].turn.angle, intersection[second_index].turn.angle);
 
     const auto intersection_lanes =
         getLaneCountAtIntersection(node_at_intersection, node_based_graph);
@@ -380,43 +380,27 @@ bool IntersectionGenerator::CanMerge(const NodeID node_at_intersection,
 Intersection IntersectionGenerator::MergeSegregatedRoads(const NodeID intersection_node,
                                                          Intersection intersection) const
 {
+    // intersections with only a single road are not considered
+    if (intersection.size() <= 1)
+        return intersection;
+
+    // TODO remove
+    const auto intersection_copy = intersection;
+    bool merged = false;
+
     const auto getRight = [&](std::size_t index) {
         return (index + intersection.size() - 1) % intersection.size();
     };
 
-    // we only merge small angles. If the difference between both is large, we are looking at a
-    // bearing leading north. Such a bearing cannot be handled via the basic average. In this
-    // case we actually need to shift the bearing by half the difference.
-    const auto aroundZero = [](const double first, const double second) {
-        return (std::max(first, second) - std::min(first, second)) >= 180;
-    };
-
-    // find the angle between two other angles
-    const auto combineAngles = [aroundZero](const double first, const double second) {
-        if (!aroundZero(first, second))
-            return .5 * (first + second);
-        else
-        {
-            const auto offset = angularDeviation(first, second);
-            auto new_angle = std::max(first, second) + .5 * offset;
-            if (new_angle > 360)
-                return new_angle - 360;
-            return new_angle;
-        }
-    };
-
-    const auto merge = [combineAngles](const ConnectedRoad &first,
-                                       const ConnectedRoad &second) -> ConnectedRoad {
+    const auto merge = [](const ConnectedRoad &first,
+                          const ConnectedRoad &second) -> ConnectedRoad {
         ConnectedRoad result = first.entry_allowed ? first : second;
-        result.turn.angle = combineAngles(first.turn.angle, second.turn.angle);
-        result.turn.bearing = combineAngles(first.turn.bearing, second.turn.bearing);
+        result.turn.angle = angleBetween(first.turn.angle, second.turn.angle);
+        result.turn.bearing = angleBetween(first.turn.bearing, second.turn.bearing);
         BOOST_ASSERT(0 <= result.turn.angle && result.turn.angle <= 360.0);
         BOOST_ASSERT(0 <= result.turn.bearing && result.turn.bearing <= 360.0);
         return result;
     };
-
-    if (intersection.size() <= 1)
-        return intersection;
 
     const bool is_connected_to_roundabout = [this, &intersection]() {
         for (const auto &road : intersection)
@@ -460,8 +444,6 @@ Intersection IntersectionGenerator::MergeSegregatedRoads(const NodeID intersecti
     // the difference to all angles. Otherwise we subtract it.
     bool merged_first = false;
     // these result in an adjustment of all other angles
-    const auto intersection_copy = intersection;
-    bool merged = false;
     if (CanMerge(intersection_node, intersection, 0, intersection.size() - 1))
     {
         merged = true;
@@ -506,22 +488,31 @@ Intersection IntersectionGenerator::MergeSegregatedRoads(const NodeID intersecti
         intersection[0].entry_allowed = false;
     }
 
+    const auto invalidate_road = [](ConnectedRoad &road) { road.turn.eid = SPECIAL_EDGEID; };
+
     // a merge including the first u-turn requres an adjustment of the turn angles
     // therefore these are handled prior to this step
-    for (std::size_t index = 2; index < intersection.size(); ++index)
+    for (std::size_t index = 2; index + 1< intersection.size(); ++index)
     {
         if (CanMerge(intersection_node, intersection, index, getRight(index)))
         {
             merged = true;
             intersection[getRight(index)] =
                 merge(intersection[getRight(index)], intersection[index]);
-            intersection.erase(intersection.begin() + index);
-            --index;
+            invalidate_road(intersection[index]);
         }
     }
 
+    // remove all invalid turns
+    intersection.erase(
+        std::remove_if(intersection.begin(),
+                       intersection.end(),
+                       [](const ConnectedRoad &road) { return road.turn.eid == SPECIAL_EDGEID; }),
+        intersection.end());
+
     if (merged)
-        util::GeojsonLogger<extractor::IntersectionPrinter>::Write(intersection_node, intersection_copy);
+        util::GeojsonLogger<extractor::IntersectionPrinter>::Write(intersection_node,
+                                                                   intersection_copy);
 
     const auto ByAngle = [](const ConnectedRoad &first, const ConnectedRoad second) {
         return first.turn.angle < second.turn.angle;
