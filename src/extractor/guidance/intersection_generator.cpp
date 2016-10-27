@@ -3,6 +3,7 @@
 #include "extractor/geojson_debug_policies.hpp"
 #include "util/geojson_debug_logger.hpp"
 
+#include "extractor/guidance/mergable-roads.hpp"
 #include "extractor/guidance/constants.hpp"
 #include "extractor/guidance/intersection_generator.hpp"
 #include "extractor/guidance/toolkit.hpp"
@@ -222,6 +223,9 @@ bool IntersectionGenerator::CanMerge(const NodeID node_at_intersection,
 {
     const auto &first_data = node_based_graph.GetEdgeData(intersection[first_index].turn.eid);
     const auto &second_data = node_based_graph.GetEdgeData(intersection[second_index].turn.eid);
+
+    if( !areSameRoad(intersection[first_index],intersection[second_index],node_based_graph) )
+        return false;
 
     // only merge named ids
     if (first_data.name_id == EMPTY_NAMEID)
