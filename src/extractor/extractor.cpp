@@ -3,6 +3,7 @@
 #include "extractor/guidance/coordinate_extractor.hpp"
 #include "util/geojson_debug_logger.hpp"
 #include "extractor/geojson_debug_policies.hpp"
+#include "util/geojson_debug_policies.hpp"
 
 #include "extractor/edge_based_edge.hpp"
 #include "extractor/extraction_containers.hpp"
@@ -492,6 +493,7 @@ Extractor::BuildEdgeExpandedGraph(ScriptingEnvironment &scripting_environment,
                                                                     *node_based_graph,
                                                                     internal_to_external_node_map,
                                                                     coordinate_extractor);
+    util::ScopedGeojsonLoggerGuard<util::CoordinateVectorToLineString> compare_guard("compare-merged.geojson");
 
     EdgeBasedGraphFactory edge_based_graph_factory(
         node_based_graph,

@@ -3,9 +3,9 @@
 #include "extractor/geojson_debug_policies.hpp"
 #include "util/geojson_debug_logger.hpp"
 
-#include "extractor/guidance/mergable-roads.hpp"
 #include "extractor/guidance/constants.hpp"
 #include "extractor/guidance/intersection_generator.hpp"
+#include "extractor/guidance/mergable-roads.hpp"
 #include "extractor/guidance/toolkit.hpp"
 
 #include <algorithm>
@@ -222,40 +222,20 @@ bool IntersectionGenerator::CanMerge(const NodeID node_at_intersection,
                                      std::size_t second_index) const
 {
     const auto &first_data = node_based_graph.GetEdgeData(intersection[first_index].turn.eid);
-    const auto &second_data = node_based_graph.GetEdgeData(intersection[second_index].turn.eid);
-
-    if( !areSameRoad(intersection[first_index],intersection[second_index],node_based_graph) )
+    if (!canMergeRoad(node_at_intersection,
+                      intersection[first_index],
+                      intersection[second_index],
+                      node_based_graph,
+                      *this,
+                      coordinate_extractor))
         return false;
 
-    // only merge named ids
-    if (first_data.name_id == EMPTY_NAMEID)
-        return false;
-
-    // need to be same name
-    if (first_data.name_id != second_data.name_id)
-        return false;
-
-    // compatibility is required
-    if (first_data.travel_mode != second_data.travel_mode)
-        return false;
-    if (first_data.road_classification != second_data.road_classification)
-        return false;
-
-    // may not be on a roundabout
-    if (first_data.roundabout || second_data.roundabout)
-        return false;
-
-    // exactly one of them has to be reversed
-    if (first_data.reversed == second_data.reversed)
-        return false;
-
-    // one of them needs to be invalid
-    if (intersection[first_index].entry_allowed && intersection[second_index].entry_allowed)
-        return false;
+    else
+        return true;
 
     // mergeable if the angle is not too big
-    const auto angular_deviation =
-        angularDeviation(intersection[first_index].turn.angle, intersection[second_index].turn.angle);
+    const auto angular_deviation = angularDeviation(intersection[first_index].turn.angle,
+                                                    intersection[second_index].turn.angle);
 
     const auto intersection_lanes =
         getLaneCountAtIntersection(node_at_intersection, node_based_graph);
@@ -503,8 +483,7 @@ Intersection IntersectionGenerator::MergeSegregatedRoads(const NodeID intersecti
             CanMerge(intersection_node, intersection, index, previous_index))
         {
             merged = true;
-            intersection[previous_index] =
-                merge(intersection[previous_index], intersection[index]);
+            intersection[previous_index] = merge(intersection[previous_index], intersection[index]);
             invalidate_road(intersection[index]);
         }
     }
