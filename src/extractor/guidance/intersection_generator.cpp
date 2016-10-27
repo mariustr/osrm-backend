@@ -250,8 +250,8 @@ bool IntersectionGenerator::CanMerge(const NodeID node_at_intersection,
         return false;
 
     // mergeable if the angle is not too big
-    const auto angle_between =
-        angleBetween(intersection[first_index].turn.angle, intersection[second_index].turn.angle);
+    const auto angular_deviation =
+        angularDeviation(intersection[first_index].turn.angle, intersection[second_index].turn.angle);
 
     const auto intersection_lanes =
         getLaneCountAtIntersection(node_at_intersection, node_based_graph);
@@ -265,7 +265,7 @@ bool IntersectionGenerator::CanMerge(const NodeID node_at_intersection,
 
     const auto coordinate_at_intersection = node_info_list[node_at_intersection];
 
-    if (angle_between >= 120)
+    if (angular_deviation >= 120)
         return false;
 
     const auto isValidYArm = [this,
@@ -315,7 +315,7 @@ bool IntersectionGenerator::CanMerge(const NodeID node_at_intersection,
     if (!is_y_arm_first || !is_y_arm_second)
         return false;
 
-    if (angle_between < 60)
+    if (angular_deviation < 60)
         return true;
 
     // Finally, we also allow merging if all streets offer the same name, it is only three roads and
@@ -350,7 +350,7 @@ bool IntersectionGenerator::CanMerge(const NodeID node_at_intersection,
     // Allow larger angles if its three roads only of the same name
     // This is a heuristic and might need to be revised.
     const bool assume_y_intersection =
-        angle_between < 100 && y_angle_difference < FUZZY_ANGLE_DIFFERENCE;
+        angular_deviation < 100 && y_angle_difference < FUZZY_ANGLE_DIFFERENCE;
     return assume_y_intersection;
 }
 
@@ -492,13 +492,15 @@ Intersection IntersectionGenerator::MergeSegregatedRoads(const NodeID intersecti
 
     // a merge including the first u-turn requres an adjustment of the turn angles
     // therefore these are handled prior to this step
-    for (std::size_t index = 2; index + 1< intersection.size(); ++index)
+    for (std::size_t index = 2; index < intersection.size(); ++index)
     {
-        if (CanMerge(intersection_node, intersection, index, getRight(index)))
+        const auto previous_index = getRight(index);
+        if (intersection[previous_index].turn.eid != SPECIAL_EDGEID &&
+            CanMerge(intersection_node, intersection, index, previous_index))
         {
             merged = true;
-            intersection[getRight(index)] =
-                merge(intersection[getRight(index)], intersection[index]);
+            intersection[previous_index] =
+                merge(intersection[previous_index], intersection[index]);
             invalidate_road(intersection[index]);
         }
     }
