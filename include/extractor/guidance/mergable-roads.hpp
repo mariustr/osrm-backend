@@ -1,8 +1,11 @@
 #ifndef OSRM_EXTRACTOR_GUIDANCE_MERGEABLE_ROADS
 #define OSRM_EXTRACTOR_GUIDANCE_MERGEABLE_ROADS
 
+#include "extractor/guidance/constants.hpp"
 #include "extractor/guidance/coordinate_extractor.hpp"
 #include "extractor/guidance/intersection.hpp"
+#include "extractor/query_node.hpp"
+#include "util/coordinate_calculation.hpp"
 #include "util/node_based_graph.hpp"
 #include "util/typedefs.hpp"
 
@@ -12,6 +15,7 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <vector>
 
 namespace osrm
 {
@@ -50,15 +54,62 @@ inline bool haveCompatibleRoadData(const util::NodeBasedEdgeData &lhs_edge_data,
     return lhs_edge_data.road_classification == rhs_edge_data.road_classification;
 }
 
+inline bool connectAgain(const NodeID intersection_node,
+                         const ConnectedRoad &lhs,
+                         const ConnectedRoad &rhs,
+                         const util::NodeBasedDynamicGraph &node_based_graph,
+                         const IntersectionGenerator &intersection_generator)
+{
+    // compute the set of all intersection_nodes along the way of an edge, until it reaches a
+    // location with the same name repeatet at least three times
+    const auto findMeetUpCandidate = [&](const NameID searched_name, const ConnectedRoad &road) {
+        auto current_node = intersection_node;
+        auto current_eid = road.turn.eid;
+
+        const auto has_requested_name = [&](const ConnectedRoad &road)
+        {
+            return name_id == node_based_graph.GetEdgeData(road.turn.eid).name_id;
+        };
+
+        // limit our search to at most 10 intersections
+        for (std::size_t hop_count = 0; hope_count < 10; ++hop_count)
+        {
+            const auto next_intersection = intersection_generator(current_node, current_eid);
+            const auto count = std::count_if(
+                next_intersection.begin() + 1, next_intersection.end(), has_requested_name);
+
+            if (count >= 2)
+                return node_based_igraph.GetTarget(current_eid);
+            else if (count == 0)
+            {
+                return SPECIAL_NODEID;
+            }
+            else
+            {
+                current_node = node_based_graph.GetTarget(current_eid);
+                // skip over bridges/similar
+                if (intersection.size() == 2)
+                    current_eid = next_intersection[1].turn.eid;
+                else
+                    current_eid = std::find_if(
+                        next_intersection.begin() + 1, next_intersection.end(), has_requested_name);
+            }
+        }
+
+        return SPECIAL_NODEID;
+    }
+}
+
 // Check if two roads go in the general same direction
 inline bool haveSameDirection(const NodeID intersection_node,
                               const ConnectedRoad &lhs,
                               const ConnectedRoad &rhs,
                               const util::NodeBasedDynamicGraph &node_based_graph,
                               const IntersectionGenerator &intersection_generator,
+                              const std::vector<QueryNode> &node_coordinates,
                               const CoordinateExtractor &coordinate_extractor)
 {
-    // Find a coordinate followint a road that is far away
+    // Find a coordinate following a road that is far away
     const std::function<util::Coordinate(const ConnectedRoad &, const double)>
         findCoordinateFollowingRoad = [&](const ConnectedRoad &road, const double length) {
             const auto &road_edge_data = node_based_graph.GetEdgeData(rhs.turn.eid);
@@ -77,28 +128,37 @@ inline bool haveSameDirection(const NodeID intersection_node,
             };
 
             if (local_length >= length)
+            {
                 return coordinate_extractor.TrimCoordinatesToLength(std::move(coordinates), length)
                     .back();
+            }
             else
             {
                 // look at the next intersection
                 const auto next_intersection =
                     intersection_generator.GetConnectedRoads(intersection_node, road.turn.eid);
 
-                BOOST_ASSERT(next_intersection.size() >= 1);
-                // and check if we can find a good way to continue on our current path
-                const auto count_same_name = std::count_if(
-                    std::begin(next_intersection) + 1, std::end(next_intersection), has_same_name);
-                // if there is no way of uniquely continuing on the road, stop
-                if (count_same_name != 1)
-                    return coordinates.back();
-                const auto next_road = std::find_if(
-                    std::begin(next_intersection) + 1, std::end(next_intersection), has_same_name);
-                return findCoordinateFollowingRoad(*next_road, length - local_length);
+                if (next_intersection.size() == 2)
+                    return findCoordinateFollowingRoad(next_intersection[1], length - local_length);
+                else
+                {
+                    BOOST_ASSERT(next_intersection.size() >= 1);
+                    // and check if we can find a good way to continue on our current path
+                    const auto count_same_name = std::count_if(std::begin(next_intersection) + 1,
+                                                               std::end(next_intersection),
+                                                               has_same_name);
+                    // if there is no way of uniquely continuing on the road, stop
+                    if (count_same_name != 1)
+                        return coordinates.back();
+                    const auto next_road = std::find_if(std::begin(next_intersection) + 1,
+                                                        std::end(next_intersection),
+                                                        has_same_name);
+                    return findCoordinateFollowingRoad(*next_road, length - local_length);
+                }
             }
         };
 
-     const double assumed_lane_width = [&]() {
+    const double assumed_lane_width = [&]() {
         const auto &lhs_edge_data = node_based_graph.GetEdgeData(lhs.turn.eid);
         const auto &rhs_edge_data = node_based_graph.GetEdgeData(rhs.turn.eid);
 
@@ -107,20 +167,12 @@ inline bool haveSameDirection(const NodeID intersection_node,
                3.25;
     }();
 
-    const auto coordinate_to_left = findCoordinateFollowingRoad(lhs, 4*assumed_lane_width);
-    const auto coordinate_to_right = findCoordinateFollowingRoad(rhs, 4*assumed_lane_width);
+    const auto coordinate_to_left = findCoordinateFollowingRoad(lhs, 5 + 4 * assumed_lane_width);
+    const auto coordinate_to_right = findCoordinateFollowingRoad(rhs, 5 + 4 * assumed_lane_width);
+    const auto angle = util::coordinate_calculation::computeAngle(
+        coordinate_to_left, node_coordinates[intersection_node], coordinate_to_right);
 
-
-    if (angularDeviation(lhs.turn.angle, rhs.turn.angle) < 100)
-    {
-        std::vector<util::Coordinate> compared;
-        compared.push_back(coordinate_to_left);
-        compared.push_back(coordinate_to_right);
-        util::GeojsonLogger<util::CoordinateVectorToLineString>::Write(compared);
-    }
-
-    return util::coordinate_calculation::haversineDistance(
-               coordinate_to_left, coordinate_to_right) < (10 + .5 * assumed_lane_width);
+    return std::min(angle, 360 - angle) < 20;
 }
 
 // Try if two roads can be merged into a single one, since they represent the same road
@@ -129,6 +181,7 @@ inline bool canMergeRoad(const NodeID intersection_node,
                          const ConnectedRoad &rhs,
                          const util::NodeBasedDynamicGraph &node_based_graph,
                          const IntersectionGenerator &intersection_generator,
+                         const std::vector<QueryNode> &node_coordinates,
                          const CoordinateExtractor &coordinate_extractor)
 {
     const auto &lhs_edge_data = node_based_graph.GetEdgeData(lhs.turn.eid);
@@ -152,11 +205,12 @@ inline bool canMergeRoad(const NodeID intersection_node,
                            rhs,
                            node_based_graph,
                            intersection_generator,
+                           node_coordinates,
                            coordinate_extractor))
         return false;
 
     // if all checks succeed, we are golden
-    return true;
+    return angularDeviation(lhs.turn.angle, rhs.turn.angle) < 60;
 }
 
 /*

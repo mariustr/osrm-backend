@@ -221,12 +221,16 @@ bool IntersectionGenerator::CanMerge(const NodeID node_at_intersection,
                                      std::size_t first_index,
                                      std::size_t second_index) const
 {
+    if( intersection.size() <= 2 )
+        return false;
+
     const auto &first_data = node_based_graph.GetEdgeData(intersection[first_index].turn.eid);
     if (!canMergeRoad(node_at_intersection,
                       intersection[first_index],
                       intersection[second_index],
                       node_based_graph,
                       *this,
+                      node_info_list,
                       coordinate_extractor))
         return false;
 

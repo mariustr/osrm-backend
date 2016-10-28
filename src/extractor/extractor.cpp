@@ -493,7 +493,6 @@ Extractor::BuildEdgeExpandedGraph(ScriptingEnvironment &scripting_environment,
                                                                     *node_based_graph,
                                                                     internal_to_external_node_map,
                                                                     coordinate_extractor);
-    util::ScopedGeojsonLoggerGuard<util::CoordinateVectorToLineString> compare_guard("compare-merged.geojson");
 
     EdgeBasedGraphFactory edge_based_graph_factory(
         node_based_graph,
